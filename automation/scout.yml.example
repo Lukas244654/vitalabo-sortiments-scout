@@ -1,0 +1,26 @@
+# ENTWURF, nicht aktiviert. Vor Nutzung: privaten Export sicher bereitstellen; iHerb-Sammlung und bereinigte Veröffentlichung ergänzen.
+# Zeitplan: täglich Signale sammeln, montags auswerten.
+# Secrets im Repo hinterlegen: OPENROUTER_API_KEY, APIFY_TOKEN. Produktexport kommt im Betrieb aus der WaWi.
+name: sortiments-scout
+on:
+  schedule:
+    - cron: "0 5 * * *"     # täglich 05:00 UTC: sammeln
+    - cron: "0 6 * * 1"     # montags 06:00 UTC: auswerten
+  workflow_dispatch: {}
+jobs:
+  scout:
+    runs-on: ubuntu-latest
+    permissions: { contents: read }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Sammeln
+        env: { APIFY_TOKEN: "${{ secrets.APIFY_TOKEN }}" }
+        run: python run_scout.py --step collect
+      - name: Auswerten (nur montags oder manuell)
+        if: github.event.schedule == '0 6 * * 1' || github.event_name == 'workflow_dispatch'
+        env: { OPENROUTER_API_KEY: "${{ secrets.OPENROUTER_API_KEY }}" }
+        run: python run_scout.py --step weekly --config config/vitalabo-sonnet55.toml
+      # Rohes results.json/report.html enthalten vertrauliche CSV-Beispiele.
+      # Veröffentlichung erst nach Bereinigung; nicht automatisch in ein öffentliches Repo committen.
