@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+data/*.csv
+!data/demo-products.csv
+data/signals/*/*.json
+!data/signals/amazon/2000-01-01.json
+output/
+cache/
+tmp/
+__pycache__/
+*.py[cod]
+*.log
+*.zip
+*.pdf
+.DS_Store
