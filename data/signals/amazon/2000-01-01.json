@@ -1,0 +1,50 @@
+[
+  {
+    "name": "DemoMissing Magnesium 100 Kapseln",
+    "position": 1,
+    "asin": "DEMO000001",
+    "url": "https://example.com/demo/1",
+    "reviewsCount": 10,
+    "stars": 4.5,
+    "price": {
+      "value": 15.0
+    },
+    "input": "https://example.com/bestsellers"
+  },
+  {
+    "name": "DemoExisting Kollagen 300 g",
+    "position": 2,
+    "asin": "DEMO000002",
+    "url": "https://example.com/demo/2",
+    "reviewsCount": 20,
+    "stars": 4.5,
+    "price": {
+      "value": 15.0
+    },
+    "input": "https://example.com/bestsellers"
+  },
+  {
+    "name": "DemoNew Kreatin Monohydrat 500 g",
+    "position": 3,
+    "asin": "DEMO000003",
+    "url": "https://example.com/demo/3",
+    "reviewsCount": 30,
+    "stars": 4.5,
+    "price": {
+      "value": 15.0
+    },
+    "input": "https://example.com/new-releases"
+  },
+  {
+    "name": "DemoMissing Lymphdrainage Kraeutermix",
+    "position": 4,
+    "asin": "DEMO000004",
+    "url": "https://example.com/demo/4",
+    "reviewsCount": 40,
+    "stars": 4.5,
+    "price": {
+      "value": 15.0
+    },
+    "input": "https://example.com/new-releases"
+  }
+]
