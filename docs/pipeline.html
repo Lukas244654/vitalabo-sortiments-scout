@@ -1,0 +1,484 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta http-equiv="Content-Style-Type" content="text/css" />
+  <meta name="generator" content="pandoc" />
+  <title>Pipeline im Detail</title>
+  <style type="text/css">code{white-space: pre;}</style>
+  <style type="text/css">
+div.sourceCode { overflow-x: auto; }
+table.sourceCode, tr.sourceCode, td.lineNumbers, td.sourceCode {
+  margin: 0; padding: 0; vertical-align: baseline; border: none; }
+table.sourceCode { width: 100%; line-height: 100%; }
+td.lineNumbers { text-align: right; padding-right: 4px; padding-left: 4px; color: #aaaaaa; border-right: 1px solid #aaaaaa; }
+td.sourceCode { padding-left: 5px; }
+code > span.kw { color: #007020; font-weight: bold; } /* Keyword */
+code > span.dt { color: #902000; } /* DataType */
+code > span.dv { color: #40a070; } /* DecVal */
+code > span.bn { color: #40a070; } /* BaseN */
+code > span.fl { color: #40a070; } /* Float */
+code > span.ch { color: #4070a0; } /* Char */
+code > span.st { color: #4070a0; } /* String */
+code > span.co { color: #60a0b0; font-style: italic; } /* Comment */
+code > span.ot { color: #007020; } /* Other */
+code > span.al { color: #ff0000; font-weight: bold; } /* Alert */
+code > span.fu { color: #06287e; } /* Function */
+code > span.er { color: #ff0000; font-weight: bold; } /* Error */
+code > span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+code > span.cn { color: #880000; } /* Constant */
+code > span.sc { color: #4070a0; } /* SpecialChar */
+code > span.vs { color: #4070a0; } /* VerbatimString */
+code > span.ss { color: #bb6688; } /* SpecialString */
+code > span.im { } /* Import */
+code > span.va { color: #19177c; } /* Variable */
+code > span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+code > span.op { color: #666666; } /* Operator */
+code > span.bu { } /* BuiltIn */
+code > span.ex { } /* Extension */
+code > span.pp { color: #bc7a00; } /* Preprocessor */
+code > span.at { color: #7d9029; } /* Attribute */
+code > span.do { color: #ba2121; font-style: italic; } /* Documentation */
+code > span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+code > span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+code > span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+  </style>
+  <link rel="stylesheet" href="pipeline.css" type="text/css" />
+</head>
+<body>
+<h1 id="pipeline-im-detail">Pipeline im Detail</h1>
+<p>Dieses Dokument beschreibt genau, was der Code tut: jede Datei, jeden Schritt, die wörtlichen Prompts und die konkreten Zwischenergebnisse mit den Daten vom 30.09.2026.</p>
+<blockquote>
+<p><strong>Finaler Stand, 30.09.2026:</strong> 210 Listeneinträge, 209 eindeutige Produkte, 202 relevante Supplements, 71 externe Marken, davon 9 bei Vitalabo geführt; 12 Marken-Lücken und 15 Produktkonzepte vollständig bewertet. Alle KI-Schritte wurden über OpenRouter mit <code>anthropic/claude-sonnet-5.5</code> durchgeführt. Das Profil ist <code>config/vitalabo-sonnet55.toml</code>. Die Beispiele unten erläutern Aufbau und Prompts; verbindlich sind der Code und die bereinigten Ergebnisse in <code>docs/results.json</code>.</p>
+<p><strong>Betriebsstatus:</strong> Ein Tagesstand pro Quelle, noch keine Wochenzeitreihe. iHerb wurde manuell erfasst. Wikipedia lieferte in diesem Lauf keine Daten. Der Bericht ist eine statische Momentaufnahme; kein Scheduler und kein GitHub Action sind aktiviert.</p>
+<p><strong>Interpretation:</strong> Ränge und Listenpräsenz sind beobachtete Marktsignale, keine gemessenen Verkaufszahlen oder Kundenbedürfnisse. Die Bezeichnung „Nachfrage“ im Code und in den wörtlichen Prompts meint diesen Proxy. Fit, Trend und Beziehbarkeit sind KI-Einschätzungen, die geprüft werden müssen. Sechs Trendbewertungen haben keine Webquellen. Gewichte 50/25/25 und Abdeckungsgrenzen 0/1–9/10+ sind konfigurierbare Annahmen, nicht aus Geschäftsdaten gelernt.</p>
+<p><strong>Vertraulichkeit:</strong> Rohes <code>results.json</code> und <code>report.html</code> enthalten CSV-Produkttitel unter <code>vitalabo_examples</code> und bleiben lokal. <code>publish_report.py</code> entfernt diese Beispiele für die öffentlichen Artefakte. Siehe <a href="REVIEW.md">Review</a> für die konkreten Grenzen.</p>
+</blockquote>
+<hr />
+<h2 id="überblick">Überblick</h2>
+<pre><code>                          run_scout.py --step collect   (täglich)
+                          ────────────────────────────
+  Amazon.de via Apify ──▶ data/signals/amazon/2026-09-30.json
+  iHerb (manuell)     ──▶ data/signals/iherb/2026-09-30.json
+
+                          run_scout.py --step weekly    (wöchentlich)
+                          ────────────────────────────
+  1  Signale laden             signals.py   load_window()         Code
+  2  Vitalabo-Bestand laden    catalog.py   Catalog               Code
+  3  Titel normalisieren       analyze.py   normalize()           KI  (Sonnet 5.5 im finalen Lauf)
+  4  Verdichten + Abgleich     analyze.py   aggregate()           Code
+  5  Fit + Trends bewerten     analyze.py   assess_brands()       KI  (starkes Modell + Websuche)
+                                            assess_trends()       KI  (starkes Modell + Websuche)
+                               trends.py    measure_many()        Code (Wikipedia-Aufrufe)
+  6  Priorisieren + Bericht    analyze.py   prioritize_brands()   Code
+                               report.py    render()              Code
+                          ──▶ output/vitalabo/results.json + report.html</code></pre>
+<p><strong>Grundsatz:</strong> Die KI liest und bewertet. Gezählt, abgeglichen und gewichtet wird im Code. Dadurch ist jedes Ergebnis nachprüfbar.</p>
+<hr />
+<h2 id="eingaben">Eingaben</h2>
+<table style="width:17%;">
+<colgroup>
+<col width="5%" />
+<col width="5%" />
+<col width="5%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Datei</th>
+<th>Inhalt</th>
+<th>Stand 30.09.2026</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>data/signals/amazon/2026-09-30.json</code></td>
+<td>Rohdaten des Apify-Scrapers: Amazon.de „Vitamine, Mineralien &amp; Ergänzungsmittel“, Bestseller + Neuerscheinungen</td>
+<td>200 Einträge (100 + 100)</td>
+</tr>
+<tr class="even">
+<td><code>data/signals/iherb/2026-09-30.json</code></td>
+<td>iHerb Top-Seller „Supplements &amp; Nährstoffe“, manuell erfasst</td>
+<td>10 Einträge</td>
+</tr>
+<tr class="odd">
+<td><code>data/vitalabo-produktdaten.csv</code></td>
+<td>Vitalabo-Export (EAN, Bezeichnung, Marke), vertraulich</td>
+<td>4.520 Produkte, 133 Marken</td>
+</tr>
+<tr class="even">
+<td><code>data/marken_vitalabo_at.txt</code></td>
+<td>Markenliste von vitalabo.at/marken</td>
+<td>ca. 330 Marken</td>
+</tr>
+<tr class="odd">
+<td><code>config/vitalabo.toml</code></td>
+<td>alles Shop-Spezifische</td>
+<td>–</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="täglicher-sammler-signals.py-collect_amazon">Täglicher Sammler — <code>signals.py: collect_amazon()</code></h2>
+<p>Ruft den Apify-Scraper <code>junglee/amazon-bestsellers</code> synchron auf und speichert die Antwort unverändert als Tagesdatei.</p>
+<p>Anfrage an <code>https://api.apify.com/v2/acts/junglee~amazon-bestsellers/run-sync-get-dataset-items</code>:</p>
+<div class="sourceCode"><pre class="sourceCode json"><code class="sourceCode json"><span class="fu">{</span><span class="dt">&quot;categoryUrls&quot;</span><span class="fu">:</span> <span class="ot">[</span><span class="st">&quot;https://www.amazon.de/gp/bestsellers/drugstore/64374031/&quot;</span><span class="ot">,</span>
+                  <span class="st">&quot;https://www.amazon.de/gp/new-releases/drugstore/64374031/&quot;</span><span class="ot">]</span><span class="fu">,</span>
+ <span class="dt">&quot;maxItemsPerStartUrl&quot;</span><span class="fu">:</span> <span class="dv">100</span><span class="fu">,</span> <span class="dt">&quot;depthOfCrawl&quot;</span><span class="fu">:</span> <span class="dv">1</span><span class="fu">}</span></code></pre></div>
+<p>Ein Rohdatensatz (echt):</p>
+<div class="sourceCode"><pre class="sourceCode json"><code class="sourceCode json"><span class="fu">{</span><span class="dt">&quot;position&quot;</span><span class="fu">:</span> <span class="dv">2</span><span class="fu">,</span>
+ <span class="dt">&quot;name&quot;</span><span class="fu">:</span> <span class="st">&quot;natural elements Magnesium Bisglycinat - Premium: Chelatiertes Magnesium - 180 Kapseln - 300mg ...&quot;</span><span class="fu">,</span>
+ <span class="dt">&quot;asin&quot;</span><span class="fu">:</span> <span class="st">&quot;B07NS14648&quot;</span><span class="fu">,</span> <span class="dt">&quot;price&quot;</span><span class="fu">:</span> <span class="fu">{</span><span class="dt">&quot;value&quot;</span><span class="fu">:</span> <span class="fl">17.99</span><span class="fu">,</span> <span class="dt">&quot;currency&quot;</span><span class="fu">:</span> <span class="st">&quot;€&quot;</span><span class="fu">},</span>
+ <span class="dt">&quot;stars&quot;</span><span class="fu">:</span> <span class="fl">4.6</span><span class="fu">,</span> <span class="dt">&quot;reviewsCount&quot;</span><span class="fu">:</span> <span class="dv">11193</span><span class="fu">,</span>
+ <span class="dt">&quot;input&quot;</span><span class="fu">:</span> <span class="st">&quot;https://www.amazon.de/gp/bestsellers/drugstore/64374031/&quot;</span><span class="fu">}</span></code></pre></div>
+<p>Kosten: 1,18 $ pro Lauf (200 Produkte, Apify-Gratisplan). iHerb wird im Prototyp nicht automatisch gesammelt.</p>
+<hr />
+<h2 id="schritt-1-signale-laden-signals.py-load_window">Schritt 1 — Signale laden · <code>signals.py: load_window()</code></h2>
+<p>Liest alle Tagesdateien der letzten 7 Tage (<code>window_days</code>) je Quelle und bringt sie in ein einheitliches Format. Dabei: - Fehlerzeilen des Scrapers werden verworfen. - Doppelte Einträge (gleiche Liste, gleicher Rang) werden entfernt; der Scraper liefert Seiten teils doppelt. - Die Liste (Bestseller/Neuerscheinung) wird aus der Start-URL abgeleitet.</p>
+<p>Ergebnis für den Datensatz oben:</p>
+<div class="sourceCode"><pre class="sourceCode json"><code class="sourceCode json"><span class="fu">{</span><span class="dt">&quot;source&quot;</span><span class="fu">:</span> <span class="st">&quot;amazon&quot;</span><span class="fu">,</span> <span class="dt">&quot;list&quot;</span><span class="fu">:</span> <span class="st">&quot;bestsellers&quot;</span><span class="fu">,</span> <span class="dt">&quot;rank&quot;</span><span class="fu">:</span> <span class="dv">2</span><span class="fu">,</span>
+ <span class="dt">&quot;name&quot;</span><span class="fu">:</span> <span class="st">&quot;natural elements Magnesium Bisglycinat - Premium: ...&quot;</span><span class="fu">,</span>
+ <span class="dt">&quot;url&quot;</span><span class="fu">:</span> <span class="st">&quot;https://www.amazon.de/dp/B07NS14648&quot;</span><span class="fu">,</span> <span class="dt">&quot;id&quot;</span><span class="fu">:</span> <span class="st">&quot;amazon:B07NS14648&quot;</span><span class="fu">,</span>
+ <span class="dt">&quot;reviews&quot;</span><span class="fu">:</span> <span class="dv">11193</span><span class="fu">,</span> <span class="dt">&quot;rating&quot;</span><span class="fu">:</span> <span class="fl">4.6</span><span class="fu">,</span> <span class="dt">&quot;price&quot;</span><span class="fu">:</span> <span class="fl">17.99</span><span class="fu">,</span> <span class="dt">&quot;date&quot;</span><span class="fu">:</span> <span class="st">&quot;2026-09-30&quot;</span><span class="fu">}</span></code></pre></div>
+<p>iHerb-Eintrag im selben Format (Marke ist hier schon bekannt und wird als Hinweis mitgegeben):</p>
+<div class="sourceCode"><pre class="sourceCode json"><code class="sourceCode json"><span class="fu">{</span><span class="dt">&quot;source&quot;</span><span class="fu">:</span> <span class="st">&quot;iherb&quot;</span><span class="fu">,</span> <span class="dt">&quot;list&quot;</span><span class="fu">:</span> <span class="st">&quot;topsellers&quot;</span><span class="fu">,</span> <span class="dt">&quot;rank&quot;</span><span class="fu">:</span> <span class="dv">1</span><span class="fu">,</span>
+ <span class="dt">&quot;name&quot;</span><span class="fu">:</span> <span class="st">&quot;Swanson Vitamins Lithiumorotat, 5 mg, 60 pflanzliche Kapseln&quot;</span><span class="fu">,</span>
+ <span class="dt">&quot;id&quot;</span><span class="fu">:</span> <span class="st">&quot;iherb:Swanson Vitamins Lithiumorotat, ...&quot;</span><span class="fu">,</span> <span class="dt">&quot;brand_hint&quot;</span><span class="fu">:</span> <span class="st">&quot;Swanson Vitamins&quot;</span><span class="fu">,</span> <span class="dt">&quot;date&quot;</span><span class="fu">:</span> <span class="st">&quot;2026-09-30&quot;</span><span class="fu">}</span></code></pre></div>
+<p><strong>Stand:</strong> 210 Einträge, 209 eindeutige Produkte.</p>
+<hr />
+<h2 id="schritt-2-vitalabo-bestand-laden-catalog.py">Schritt 2 — Vitalabo-Bestand laden · <code>catalog.py</code></h2>
+<ul>
+<li><code>load_products()</code> liest den Export (EAN, Bezeichnung, Marke), dedupliziert nach EAN.</li>
+<li><code>load_site_brands()</code> liest die Markenliste der Website.</li>
+<li><code>Catalog</code> vereint beides: <strong>333 Marken</strong> gelten als „geführt“.</li>
+</ul>
+<p>Zwei Prüfungen, beide reiner Code:</p>
+<p><strong>Marke geführt?</strong> <code>match_brand()</code>: Name normalisieren (Kleinschreibung, ® und ™ entfernen, Rechtsformen wie GmbH streichen), dann exakter Treffer oder Enthaltensein als ganze Wortfolge (mindestens 4 Zeichen). - „Doppelherz“ → Treffer „Doppelherz“ - „natural elements“ → kein Treffer (auch nicht „Natural Point“, weil nur ganze Wortfolgen zählen)</p>
+<p><strong>Wirkstoff abgedeckt?</strong> <code>coverage()</code>: zählt Export-Produkte, deren Name einen der Suchbegriffe enthält. - 0 Treffer → <strong>Lücke</strong>, 1–9 → <strong>dünn</strong>, ab 10 → <strong>abgedeckt</strong></p>
+<hr />
+<h2 id="schritt-3-titel-normalisieren-analyze.py-normalize-ki">Schritt 3 — Titel normalisieren · <code>analyze.py: normalize()</code> · KI</h2>
+<p><strong>Warum KI:</strong> Amazon übersetzt Markennamen („Double Heart“ ist Doppelherz), Titel haben keine feste Struktur, und die Marke steht nicht immer am Anfang. Mit Regeln scheitert das; der Testlauf ohne KI hat genau diese Fehler produziert.</p>
+<p><strong>Modell im finalen Lauf:</strong> Rolle <code>classify</code>, ausschließlich <code>anthropic/claude-sonnet-5.5</code> aus <code>config/vitalabo-sonnet55.toml</code>. Die ursprüngliche Konfiguration <code>config/vitalabo.toml</code> hat andere Fallbacks. <strong>Aufruf:</strong> 60 Titel pro Anfrage, Temperatur 0, also 4 Aufrufe für 209 Titel. Ergebnisse werden je Produkt in <code>output/vitalabo/normalized.json</code> gespeichert; in der nächsten Woche werden nur neue Produkte normalisiert.</p>
+<p><strong>System-Prompt (wörtlich):</strong></p>
+<pre><code>Du normalisierst Produkttitel von Amazon und iHerb für einen Händler von Nahrungsergänzungsmitteln.
+Pro Titel: (1) brand = der echte Markenname in seiner Originalschreibweise – Amazon übersetzt Marken teils
+(&quot;Double Heart&quot; = &quot;Doppelherz&quot;); ist keine Marke erkennbar (No-Name/Generika), dann &quot;&quot;.
+(2) wirkstoff = zentraler Wirkstoff bzw. Produktkonzept als kurzer deutscher Begriff, wie ein Wikipedia-Artikel
+(z. B. &quot;Magnesium&quot;, &quot;Kollagen&quot;, &quot;Lymphdrainage&quot;, &quot;Berberin&quot;, &quot;TUDCA&quot;).
+(3) begriffe = 2–4 Suchbegriffe (deutsch/englisch, Kleinschreibung), mit denen man denselben Wirkstoff in
+Produktnamen findet. (4) code = Warengruppe aus der Liste. (5) relevant = false für Nicht-Supplements
+(Pflaster, Kosmetik, Geräte, Lebensmittel ohne Ergänzungszweck).
+Antworte nur mit JSON {&quot;&lt;id&gt;&quot;: {&quot;brand&quot;:&quot;&quot;,&quot;wirkstoff&quot;:&quot;&quot;,&quot;begriffe&quot;:[],&quot;code&quot;:&quot;&quot;,&quot;relevant&quot;:true}}.</code></pre>
+<p><strong>User-Nachricht (Aufbau):</strong></p>
+<pre><code>Warengruppen:
+VIT – Vitamine
+MIN – Mineralstoffe &amp; Spurenelemente
+... (24 Gruppen aus config/vitalabo.toml)
+
+Titel (id|Titel):
+0|natural elements Magnesium Bisglycinat - Premium: Chelatiertes Magnesium - 180 Kapseln ...
+1|Double Heart Omega-3 1400 | High dose omega-3 concentrate plus vitamin E ...
+...</code></pre>
+<p><strong>Beispielantwort (Format):</strong></p>
+<div class="sourceCode"><pre class="sourceCode json"><code class="sourceCode json"><span class="fu">{</span><span class="dt">&quot;0&quot;</span><span class="fu">:</span> <span class="fu">{</span><span class="dt">&quot;brand&quot;</span><span class="fu">:</span> <span class="st">&quot;natural elements&quot;</span><span class="fu">,</span> <span class="dt">&quot;wirkstoff&quot;</span><span class="fu">:</span> <span class="st">&quot;Magnesium&quot;</span><span class="fu">,</span> <span class="dt">&quot;begriffe&quot;</span><span class="fu">:</span> <span class="ot">[</span><span class="st">&quot;magnesium&quot;</span><span class="ot">,</span> <span class="st">&quot;bisglycinat&quot;</span><span class="ot">]</span><span class="fu">,</span> <span class="dt">&quot;code&quot;</span><span class="fu">:</span> <span class="st">&quot;MIN&quot;</span><span class="fu">,</span> <span class="dt">&quot;relevant&quot;</span><span class="fu">:</span> <span class="kw">true</span><span class="fu">},</span>
+ <span class="dt">&quot;1&quot;</span><span class="fu">:</span> <span class="fu">{</span><span class="dt">&quot;brand&quot;</span><span class="fu">:</span> <span class="st">&quot;Doppelherz&quot;</span><span class="fu">,</span> <span class="dt">&quot;wirkstoff&quot;</span><span class="fu">:</span> <span class="st">&quot;Omega-3&quot;</span><span class="fu">,</span> <span class="dt">&quot;begriffe&quot;</span><span class="fu">:</span> <span class="ot">[</span><span class="st">&quot;omega-3&quot;</span><span class="ot">,</span> <span class="st">&quot;omega 3&quot;</span><span class="ot">,</span> <span class="st">&quot;fischöl&quot;</span><span class="ot">]</span><span class="fu">,</span> <span class="dt">&quot;code&quot;</span><span class="fu">:</span> <span class="st">&quot;OMEGA&quot;</span><span class="fu">,</span> <span class="dt">&quot;relevant&quot;</span><span class="fu">:</span> <span class="kw">true</span><span class="fu">}}</span></code></pre></div>
+<p>Ohne KI (<code>--no-llm</code>) greift eine bewusst grobe Heuristik: erstes Wort als Marke, Wirkstoff per Stichwortliste. Sie dient nur zum Testen und ist im Bericht als Testlauf markiert.</p>
+<hr />
+<h2 id="schritt-4-verdichten-und-abgleichen-analyze.py-aggregate-code">Schritt 4 — Verdichten und abgleichen · <code>analyze.py: aggregate()</code> · Code</h2>
+<p><strong>Pro Produkt</strong> über alle Tage des Fensters: - bester Rang je Liste, Tage in der Liste, letzte Bewertungsanzahl - <strong>Signalpunkte:</strong></p>
+<pre><code>Punkte = Σ über Listen [ Gewicht(Liste) × (Listenlänge + 1 − Rang) / Listenlänge ] × Tage in der Liste / Tage im Fenster
+Gewicht: Bestseller 1,0 · Top-Seller (iHerb) 1,0 · Neuerscheinung 0,8
+Listenlänge: Amazon 100 · iHerb 10</code></pre>
+<p>Beispiel natural elements Magnesium (Bestseller #2, 1 von 1 Tag): 1,0 × (101 − 2) / 100 × 1 = <strong>0,99</strong>. Beispiel iHerb #1 Swanson Lithiumorotat: 1,0 × (11 − 1) / 10 × 1 = <strong>1,0</strong>.</p>
+<p><strong>Pro Marke:</strong> Summe der Punkte = <strong>Signalstärke</strong>, dazu Anzahl Produkte, davon neu, Quellen, bester Rang, Summe der Bewertungen, häufigste Warengruppe, und <strong><code>carried_as</code></strong> (Treffer aus Schritt 2 oder leer).</p>
+<p><strong>Pro Wirkstoff:</strong> Varianten werden zusammengefasst („Kreatin Monohydrat“ → „Kreatin“, „Magnesium Komplex“ → „Magnesium“). Dann: Anzahl Produkte, davon Neuerscheinungen, davon Bestseller, Quellen, <strong>No-Name-Anteil</strong> (viele Produkte ohne Marke deuten auf Hype-Ware), Treffer im Vitalabo-Export und Einstufung Lücke/dünn/abgedeckt.</p>
+<p>Sortierung der Wirkstoffe (Frühsignal vor Volumen):</p>
+<pre><code>2 × Neuerscheinungen + Produkte + (3 bei Lücke, 1 bei dünn) + (2 wenn auch auf iHerb)</code></pre>
+<p><strong>Auswahl für Schritt 5:</strong> die 12 stärksten Marken ohne <code>carried_as</code> (<code>top_brand_gaps</code>) und die 15 ersten Wirkstoffe (<code>top_trends</code>).</p>
+<p><strong>Zwischenstand vor dem KI-Lauf (echte Daten, Marken von Hand geprüft):</strong></p>
+<table>
+<thead>
+<tr class="header">
+<th>Marke</th>
+<th>Produkte in den Top 100</th>
+<th>Bester Rang</th>
+<th>Bewertungen</th>
+<th>geführt</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>natural elements</td>
+<td>18</td>
+<td>#2</td>
+<td>ca. 221.000</td>
+<td>nein</td>
+</tr>
+<tr class="even">
+<td>Sunday Natural</td>
+<td>9 + 4 Neuerscheinungen</td>
+<td>#3</td>
+<td>ca. 9.700</td>
+<td>nein</td>
+</tr>
+<tr class="odd">
+<td>Naturtreu</td>
+<td>5 + 1</td>
+<td>#34</td>
+<td>ca. 17.700</td>
+<td>nein</td>
+</tr>
+<tr class="even">
+<td>Wehle</td>
+<td>1</td>
+<td>#4</td>
+<td>ca. 20.000</td>
+<td>nein</td>
+</tr>
+<tr class="odd">
+<td>Kijimea</td>
+<td>1</td>
+<td>#9</td>
+<td>ca. 12.300</td>
+<td>nein</td>
+</tr>
+<tr class="even">
+<td>ESN</td>
+<td>10 + 1</td>
+<td>#12</td>
+<td>ca. 45.600</td>
+<td>ja</td>
+</tr>
+<tr class="odd">
+<td>Doppelherz (auch als „Double Heart“)</td>
+<td>5 + 1</td>
+<td>#30</td>
+<td>ca. 16.900</td>
+<td>ja</td>
+</tr>
+<tr class="even">
+<td>Glow25</td>
+<td>2</td>
+<td>#1</td>
+<td>ca. 8.500</td>
+<td>ja</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="schritt-5a-fit-der-marken-lücken-analyze.py-assess_brands-ki-mit-websuche">Schritt 5a — Fit der Marken-Lücken · <code>analyze.py: assess_brands()</code> · KI mit Websuche</h2>
+<p><strong>Warum KI:</strong> Die Listen zeigen Nachfrageindikatoren, nicht Beziehbarkeit oder tatsächliche Verkaufszahlen. Ob eine Marke an Händler liefert oder nur direkt verkauft, muss recherchiert werden.</p>
+<p><strong>Modell im finalen Lauf:</strong> Rolle <code>research</code>, ausschließlich <code>anthropic/claude-sonnet-5.5</code>, mit OpenRouter-Websuche (10 Treffer). <strong>Ein Aufruf</strong> für alle 12 Marken.</p>
+<p><strong>System-Prompt (wörtlich, auch für 5b):</strong></p>
+<pre><code>Du bist Category Manager:in eines Onlinehändlers für Nahrungsergänzung im DACH-Raum. Du recherchierst im Web,
+stützt Aussagen auf Belege und bist ehrlich, wenn Belege fehlen. Antworte ausschließlich mit JSON.</code></pre>
+<p><strong>User-Nachricht (wörtlich, Platzhalter in spitzen Klammern):</strong></p>
+<pre><code>Shop: Vitalabo (https://www.vitalabo.at). &lt;Positionierung aus der Konfiguration&gt;
+
+Diese Marken verkaufen sich auf Amazon.de bzw. iHerb nachweislich gut (Bestseller-/Neuheitenlisten), der Shop führt sie nicht:
+- natural elements (Mineralstoffe &amp; Spurenelemente): 18 Produkte in den Listen, bester Rang 2, 221000 Bewertungen; z. B. natural elements Magnesium Bisglycinat ...
+- ...
+
+Die Nachfrage ist gemessen. Recherchiere je Marke kurz: Hersteller/Herkunft, Positionierung, Vertriebsweg
+(eigener Shop, Amazon, Apotheke, Händler?) und ob ein Bezug durch einen Onlinehändler realistisch ist.
+Bewerte von 1 (schwach) bis 5 (sehr stark):
+- ecommerce_fit: versandfähig, nicht apotheken-/verschreibungspflichtig, Wiederkauf bzw. Abo-Eignung, Warenkorbwert, lagerfähig, wenig Beratungs-/Retourenaufwand
+- niceshops_fit: Premium/Nische statt Massenmarkt, ergänzt statt kannibalisiert, Bezug über Hersteller/Distributor realistisch (reine Direktvertriebs- oder Amazon-only-Marken abwerten), passt zur Zielgruppe
+
+JSON: {&quot;brands&quot;:[{&quot;brand&quot;:&quot;&quot;,&quot;herkunft&quot;:&quot;&quot;,&quot;beschreibung&quot;:&quot;1 Satz&quot;,&quot;vertrieb&quot;:&quot;z. B. D2C + Amazon, auch Händler&quot;,
+&quot;beziehbar&quot;:&quot;ja|unklar|eher nein&quot;,&quot;begruendung&quot;:&quot;1–2 Sätze&quot;,
+&quot;scores&quot;:{&quot;ecommerce_fit&quot;:{&quot;score&quot;:0,&quot;grund&quot;:&quot;&quot;},&quot;niceshops_fit&quot;:{&quot;score&quot;:0,&quot;grund&quot;:&quot;&quot;}},&quot;quellen&quot;:[&quot;https://...&quot;]}]}</code></pre>
+<p>Die Nachfrage bewertet das Modell bewusst <strong>nicht</strong>, sie kommt aus Schritt 4.</p>
+<hr />
+<h2 id="schritt-5b-trend-einschätzung-analyze.py-assess_trends-ki-mit-websuche">Schritt 5b — Trend-Einschätzung · <code>analyze.py: assess_trends()</code> · KI mit Websuche</h2>
+<p><strong>Ein Aufruf</strong> für die 15 Wirkstoffe.</p>
+<p><strong>User-Nachricht (wörtlich):</strong></p>
+<pre><code>Shop: Vitalabo (...). &lt;Positionierung&gt;
+
+Wirkstoffe/Konzepte aus den aktuellen Amazon.de- und iHerb-Bestseller- und Neuheitenlisten:
+- Lithium: 2 Produkte (0 Neuerscheinungen), No-Name-Anteil 0 %, im Shop bereits 0 Produkte (Lücke)
+- Lymphdrainage: 6 Produkte (6 Neuerscheinungen), No-Name-Anteil 33 %, im Shop bereits 5 Produkte (dünn)
+- ...
+
+Schätze je Eintrag per Websuche ein: echter Trend mit wachsender Nachfrage oder kurzfristiger Hype (z. B. Social Media)?
+Gibt es regulatorische Risiken in der EU (Novel Food, Health Claims, Höchstmengen)? Passt es zum Shop?
+Berücksichtige, wie viele Produkte der Shop dazu schon führt (Lücke = 0, dünn = 1–9, abgedeckt = ab 10), und wähle die Empfehlung so:
+neu aufnehmen (Lücke, echter Trend, regulatorisch unkritisch) · ausbauen (dünn besetzt, Nachfrage wächst) ·
+bereits abgedeckt (Shop gut sortiert) · beobachten (unklar) · ignorieren (Hype oder regulatorisch riskant).
+JSON: {&quot;trends&quot;:[{&quot;term&quot;:&quot;&quot;,&quot;einschaetzung&quot;:&quot;Trend|Hype|etabliert&quot;,&quot;begruendung&quot;:&quot;1–2 Sätze&quot;,
+&quot;regulatorik&quot;:&quot;kurz oder \&quot;–\&quot;&quot;,&quot;empfehlung&quot;:&quot;neu aufnehmen|ausbauen|bereits abgedeckt|beobachten|ignorieren&quot;,&quot;quellen&quot;:[&quot;https://...&quot;]}]}</code></pre>
+<h2 id="schritt-5c-interesse-verlauf-trends.py-code">Schritt 5c — Interesse-Verlauf · <code>trends.py</code> · Code</h2>
+<p>Für jeden der 15 Wirkstoffe: passenden Wikipedia-Artikel suchen (Deutsch und Englisch), monatliche Seitenaufrufe der letzten 24 Monate abrufen und addieren. - <strong>Wachstum</strong> = letzte 3 Monate gegenüber denselben 3 Monaten im Vorjahr (saisonbereinigt) - <strong>Momentum</strong> = letzte 3 Monate gegenüber den 3 Monaten davor</p>
+<p>Kostenlos, kein Schlüssel. Im Bericht als Verlaufskurve. Ist Wikipedia aus der Laufumgebung nicht erreichbar, blendet der Bericht die Spalte aus.</p>
+<hr />
+<h2 id="schritt-6-priorisieren-und-berichten-analyze.py-prioritize_brands-report.py">Schritt 6 — Priorisieren und berichten · <code>analyze.py: prioritize_brands()</code>, <code>report.py</code></h2>
+<pre><code>Nachfrage (1–5)  = 1 + round(4 × Signalstärke / stärkste Signalstärke unter den Lücken)     gemessen
+E-Commerce-Fit   = Score aus 5a (fehlt er: 3)
+niceshops-Fit    = Score aus 5a (fehlt er: 3)
+Priorität (0–100) = (0,5 × Nachfrage + 0,25 × E-Commerce-Fit + 0,25 × niceshops-Fit − 1) / 4 × 100</code></pre>
+<p>Die Gewichte stehen in <code>config/vitalabo.toml</code> unter <code>[scoring]</code>.</p>
+<p><strong>Ausgabe:</strong> - <code>output/vitalabo/results.json</code>: <code>meta</code>, <code>summary</code>, <code>brand_gaps</code> (mit Fit, Belegen, Quellen), <code>brands_carried</code> (Gegenprobe), <code>trends</code> (mit Einschätzung und Verlauf) - <code>output/vitalabo/report.html</code>: eine eigenständige Seite mit den Reitern Marken-Lücken, Trends, Bereits geführt, So funktioniert's, Annahmen &amp; Fragen - Kopie beider Dateien unter <code>output/vitalabo/runs/&lt;Datum&gt;/</code> als Verlauf</p>
+<hr />
+<h2 id="wie-die-werte-entstehen">Wie die Werte entstehen</h2>
+<p>Drei Werte bestimmen die Priorität einer Marken-Lücke. Einer davon wird aus beobachteten Rängen berechnet, zwei sind Einschätzungen der KI. Die Verrechnung passiert immer im Code.</p>
+<h3 id="nachfrageindikator-15-aus-beobachteten-rängen-reiner-code">Nachfrageindikator (1–5): aus beobachteten Rängen, reiner Code</h3>
+<ol style="list-style-type: decimal">
+<li><strong>Pro Produkt Signalpunkte:</strong> Rang relativ zur Listenlänge, gewichtet nach Liste, mal Anteil der Tage, an denen das Produkt in der Liste stand.</li>
+</ol>
+<p><code>Punkte = Gewicht × (Listenlänge + 1 − Rang) / Listenlänge × Tage in der Liste / Tage im Fenster    Gewicht:     Bestseller 1,0 · iHerb-Top-Seller 1,0 · Neuerscheinung 0,8    Listenlänge: Amazon 100 · iHerb 10</code></p>
+<ol start="2" style="list-style-type: decimal">
+<li><strong>Pro Marke:</strong> Summe der Punkte aller Produkte der Marke, das ist die <strong>Signalstärke</strong>.</li>
+<li><strong>Skala 1 bis 5:</strong></li>
+</ol>
+<p><code>Nachfrage = 1 + round(4 × Signalstärke der Marke / stärkste Signalstärke unter den Lücken der Woche)</code></p>
+<p>Die Skala ist <strong>relativ</strong>: Die stärkste Lücke der Woche bekommt immer eine 5, die anderen werden daran gemessen. Das macht Wochen untereinander nicht direkt vergleichbar; eine absolute Skala (z. B. über Keepa-Kaufzähler) ist ein nächster Schritt.</p>
+<h3 id="e-commerce-fit-und-niceshops-fit-15-einschätzung-der-ki-nach-fester-rubrik">E-Commerce-Fit und niceshops-Fit (1–5): Einschätzung der KI nach fester Rubrik</h3>
+<p>Diese beiden Werte werden <strong>nicht berechnet</strong>. Das Recherche-Modell vergibt sie mit Websuche nach der Rubrik, die wörtlich im Prompt steht (Schritt 5a):</p>
+<ul>
+<li><strong>E-Commerce-Fit:</strong> versandfähig, nicht apotheken- oder verschreibungspflichtig, Wiederkauf bzw. Abo-Eignung, Warenkorbwert, lagerfähig, wenig Beratungs- und Retourenaufwand</li>
+<li><strong>niceshops-Fit:</strong> Premium oder Nische statt Massenmarkt, ergänzt statt kannibalisiert, über Hersteller oder Distributor beziehbar (reine Direktvertriebs- oder Amazon-Marken werden abgewertet), passt zur Zielgruppe</li>
+</ul>
+<p>Zu jedem Score liefert das Modell eine Begründung, eine Einschätzung der Beziehbarkeit (ja / unklar / eher nein) und Quellen. Fehlt eine Bewertung, setzt der Code den Wert 3 ein und markiert die Marke im Bericht als „Fit nicht bewertet“.</p>
+<h3 id="priorität-0100-code">Priorität (0–100): Code</h3>
+<pre><code>Priorität = (0,5 × Nachfrage + 0,25 × E-Commerce-Fit + 0,25 × niceshops-Fit − 1) / 4 × 100</code></pre>
+<p>Der Nachfrageindikator zählt doppelt als bewusst gewählte Prototyp-Annahme. Dass diese Gewichtung das Umsatzpotenzial am besten vorhersagt, ist nicht belegt. Die Gewichte stehen in <code>config/vitalabo.toml</code> unter <code>[scoring]</code> und lassen sich ohne Codeänderung anpassen.</p>
+<h3 id="nachgerechnet-am-finalen-sonnet-lauf-vom-30.09.2026">Nachgerechnet am finalen Sonnet-Lauf vom 30.09.2026</h3>
+<table>
+<thead>
+<tr class="header">
+<th>Marke</th>
+<th>Nachfrageindikator</th>
+<th>E-Commerce-Fit</th>
+<th>niceshops-Fit</th>
+<th>Rechnung</th>
+<th>Priorität</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>natural elements</td>
+<td>5</td>
+<td>4</td>
+<td>2</td>
+<td>(0,5 × 5 + 0,25 × 4 + 0,25 × 2 − 1) / 4 × 100</td>
+<td><strong>75</strong></td>
+</tr>
+<tr class="even">
+<td>SUNDAY NATURAL</td>
+<td>4</td>
+<td>5</td>
+<td>2</td>
+<td>(0,5 × 4 + 0,25 × 5 + 0,25 × 2 − 1) / 4 × 100</td>
+<td><strong>69</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Das Ranking priorisiert Prüfungskandidaten. Hohe Listenpräsenz beweist weder Beziehbarkeit noch wirtschaftlichen Nutzen für Vitalabo.</p>
+<h3 id="stärken-und-grenzen-dieser-bewertung">Stärken und Grenzen dieser Bewertung</h3>
+<ul>
+<li><strong>Stärke:</strong> Die Listenpräsenz ist beobachtet und die Berechnung nachvollziehbar. Die Gewichtung liegt im Code und ist konfigurierbar. Die KI liefert nur Einzelurteile, jeweils mit Begründung und Quellen.</li>
+<li><strong>Grenze:</strong> Die Fit-Scores bleiben KI-Urteile und können danebenliegen, besonders bei der Beziehbarkeit. Sie sind ein Hinweis zur Prüfung, keine Entscheidung.</li>
+<li><strong>Nächster Schritt:</strong> Die Fit-Werte in prüfbare Einzelkriterien zerlegen (Apothekenpflicht ja/nein, Abo-fähig ja/nein, Händlervertrieb ja/nein, Preis über einer Schwelle) und über das Feedback des Einkaufs (gelistet / abgelehnt / beobachten) kalibrieren.</li>
+</ul>
+<hr />
+<h2 id="dateien">Dateien</h2>
+<table style="width:17%;">
+<colgroup>
+<col width="5%" />
+<col width="5%" />
+<col width="5%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Datei</th>
+<th>Zeilen</th>
+<th>Aufgabe</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>run_scout.py</code></td>
+<td>121</td>
+<td>Einstieg; <code>--step collect</code> (täglich) oder <code>--step weekly</code> (wöchentlich); ruft die Schritte 1–6 der Reihe nach auf</td>
+</tr>
+<tr class="even">
+<td><code>config/vitalabo.toml</code></td>
+<td>–</td>
+<td>Shop-Beschreibung, Amazon-Kategorie, Quellen, Fenster, Modelle, Gewichte, Warengruppen</td>
+</tr>
+<tr class="odd">
+<td><code>scout/signals.py</code></td>
+<td>115</td>
+<td>Tagesdateien laden und vereinheitlichen; Amazon-Sammler über Apify</td>
+</tr>
+<tr class="even">
+<td><code>scout/catalog.py</code></td>
+<td>69</td>
+<td>Vitalabo-Export und Markenliste; Markenabgleich; Wirkstoff-Abdeckung</td>
+</tr>
+<tr class="odd">
+<td><code>scout/analyze.py</code></td>
+<td>267</td>
+<td>Normalisieren (KI), Verdichten, Fit und Trends (KI + Websuche), Priorisierung</td>
+</tr>
+<tr class="even">
+<td><code>scout/trends.py</code></td>
+<td>87</td>
+<td>Wikipedia-Aufrufe je Wirkstoff, Wachstum und Momentum</td>
+</tr>
+<tr class="odd">
+<td><code>scout/llm.py</code></td>
+<td>151</td>
+<td>OpenRouter-Client: Modellwahl, Websuche, Wiederholung bei Fehlern, Cache, Kostenzählung, JSON-Reparatur</td>
+</tr>
+<tr class="even">
+<td><code>scout/report.py</code>, <code>report.css</code></td>
+<td>261</td>
+<td>HTML-Bericht aus <code>results.json</code></td>
+</tr>
+<tr class="odd">
+<td><code>automation/scout.yml.example</code></td>
+<td>–</td>
+<td>Nicht aktiver Zeitplan-Entwurf; Betrieb und sichere Veröffentlichung noch einzurichten</td>
+</tr>
+<tr class="even">
+<td><code>publish_report.py</code></td>
+<td>–</td>
+<td>Öffentlicher Export ohne private CSV-Produkttitel-Beispiele</td>
+</tr>
+</tbody>
+</table>
+<h2 id="aufwand-je-wochenlauf">Aufwand je Wochenlauf</h2>
+<table>
+<thead>
+<tr class="header">
+<th>Schritt</th>
+<th>Aufrufe</th>
+<th>Modell</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>3 Normalisieren</td>
+<td>4 (je 60 Titel), danach nur neue Produkte</td>
+<td>Sonnet 5.5</td>
+</tr>
+<tr class="even">
+<td>5a Fit</td>
+<td>1</td>
+<td>Sonnet 5.5 + Websuche</td>
+</tr>
+<tr class="odd">
+<td>5b Trends</td>
+<td>1</td>
+<td>Sonnet 5.5 + Websuche</td>
+</tr>
+<tr class="even">
+<td>5c Wikipedia</td>
+<td>15–30 HTTP-Abrufe</td>
+<td>kein LLM</td>
+</tr>
+</tbody>
+</table>
+<p>Die finale Nachberechnung von Fit und Trends kostete laut OpenRouter-Antworten <strong>1,013844 USD</strong> (2 neue Aufrufe, 160 Sekunden). Die bereits mit Sonnet berechnete Normalisierung wurde dabei wiederverwendet. Frühere Läufe und die Apify-Sammlung sind darin nicht enthalten; das ist keine Gesamtbudget-Abrechnung. Kosten variieren mit neuen Titeln, Websuche, Modell und Wiederholungen. Ein täglicher Sammler würde zusätzlich Apify-Kosten verursachen.</p>
+</body>
+</html>

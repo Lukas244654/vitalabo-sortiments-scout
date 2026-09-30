@@ -1,0 +1,11 @@
+body { max-width: 920px; margin: 0 auto; padding: 2rem 1.25rem 4rem; color: #24313a; background: #fafbf8; font: 16px/1.6 system-ui, sans-serif; }
+h1, h2, h3 { line-height: 1.2; color: #173a47; }
+h1 { font-size: 2rem; }
+h2 { margin-top: 2.4rem; border-bottom: 1px solid #d6e0db; padding-bottom: .3rem; }
+a { color: #176a79; }
+pre, code { font-family: ui-monospace, Consolas, monospace; }
+pre { overflow-x: auto; padding: 1rem; background: #edf3ef; border-radius: 8px; }
+code { overflow-wrap: anywhere; }
+table { display: block; overflow-x: auto; border-collapse: collapse; }
+th, td { border: 1px solid #d6e0db; padding: .45rem .65rem; text-align: left; vertical-align: top; }
+blockquote { margin-left: 0; padding: .1rem 1rem; border-left: 4px solid #88a89b; background: #f0f5f1; }
