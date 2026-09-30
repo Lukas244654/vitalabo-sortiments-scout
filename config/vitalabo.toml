@@ -1,0 +1,145 @@
+# Shop-Konfiguration für den KI Sortiments Scout.
+# Für einen anderen niceshops-Shop: Datei kopieren, [shop], [export], [signals] und [[taxonomy]] anpassen.
+
+[shop]
+id = "vitalabo"
+name = "Vitalabo"
+url = "https://www.vitalabo.at"
+brands_file = "data/marken_vitalabo_at.txt"   # Markenliste von vitalabo.at/marken (Ausschlussliste)
+positioning = """
+Onlineshop für hochwertige Nahrungsergänzungsmittel, Vitalstoffe und natürliche Gesundheitsprodukte (seit 2006,
+erster Shop der niceshops-Gruppe). Kombiniert bekannte Hersteller (z. B. Pure Encapsulations, Nature's Plus,
+Burgerstein) mit jungen, innovativen Marken. Abo-Modell: Produkte mit regelmäßigem Wiederkauf passen besonders gut.
+Zielgruppe: gesundheitsbewusste Endkund:innen im DACH-Raum und darüber hinaus.
+"""
+
+[export]
+path = "data/vitalabo-produktdaten.csv"
+skip_rows = 3
+col_ean = "EAN"
+col_name = "WAWI-Bezeichnung"
+col_brand = "Marke (WaWi Produkt)"
+
+[signals]
+sources = ["amazon", "iherb"]
+window_days = 7            # der wöchentliche Agent wertet die Tagesstände der letzten 7 Tage aus
+
+[signals.amazon]
+actor = "junglee/amazon-bestsellers"            # Apify-Scraper
+category_path = "drugstore/64374031"            # Amazon.de: Vitamine, Mineralien & Ergänzungsmittel
+lists = ["bestsellers", "new-releases"]
+max_items = 100
+
+[models]
+# Erste verfügbare OpenRouter-Modell-ID pro Rolle wird verwendet.
+classify = ["google/gemini-2.5-flash", "openai/gpt-5-mini", "openai/gpt-4.1-mini", "openrouter/auto"]
+research = ["anthropic/claude-sonnet-4.5", "openai/gpt-5.2", "openai/gpt-5", "google/gemini-2.5-pro", "openrouter/auto"]
+
+[scan]
+top_brand_gaps = 12        # so viele Marken-Lücken bekommen eine Fit-Bewertung mit Websuche
+top_trends = 15            # so viele Wirkstoffe/Konzepte bekommen eine Trend-Einschätzung
+wikipedia_check = true     # Interesse-Verlauf (24 Monate) für die Top-Trends messen
+
+[scoring]
+# Gewichte (Summe = 1). Nachfrage ist gemessen und zählt doppelt.
+demand = 0.5
+ecommerce_fit = 0.25
+niceshops_fit = 0.25
+
+# Warengruppen-Taxonomie. Solange keine interne niceshops-Warengruppenstruktur vorliegt, ist das eine Annahme.
+[[taxonomy]]
+code = "VIT"
+name = "Vitamine"
+hint = "Einzelvitamine und Vitamin-Komplexe, Multivitamine"
+[[taxonomy]]
+code = "MIN"
+name = "Mineralstoffe & Spurenelemente"
+hint = "Magnesium, Zink, Eisen, Selen, Kalium, Jod, Mineralkomplexe"
+[[taxonomy]]
+code = "OMEGA"
+name = "Omega-3 & Fettsäuren"
+hint = "Fischöl, Krillöl, Algenöl, Nachtkerzenöl, Omega 3/6/9, Lecithin"
+[[taxonomy]]
+code = "AMINO"
+name = "Aminosäuren"
+hint = "L-Lysin, L-Glutamin, L-Tyrosin, L-Carnitin, Taurin (nicht Sport-BCAA-Produkte)"
+[[taxonomy]]
+code = "DARM"
+name = "Darm & Verdauung"
+hint = "Probiotika, Präbiotika, Verdauungsenzyme, Ballaststoffe, Flohsamen, Bitterstoffe, Leber"
+[[taxonomy]]
+code = "PFLANZ"
+name = "Pflanzenstoffe & Heilkräuter"
+hint = "Pflanzenextrakte in Kapseln/Tropfen, Kurkuma, Ashwagandha, Weihrauch, Tinkturen, Heilkräutertees"
+[[taxonomy]]
+code = "PILZ"
+name = "Vitalpilze"
+hint = "Reishi, Hericium, Cordyceps, Chaga, Pilzextrakte"
+[[taxonomy]]
+code = "LONG"
+name = "Antioxidantien & Longevity"
+hint = "Q10, OPC, Resveratrol, NMN, NADH, Spermidin, Quercetin, Glutathion, Alpha-Liponsäure"
+[[taxonomy]]
+code = "GELENK"
+name = "Gelenke, Knochen & Kollagen"
+hint = "Glucosamin, Chondroitin, MSM, Kollagen, Hyaluron (oral), Knochen-Komplexe"
+[[taxonomy]]
+code = "BASEN"
+name = "Basen & Detox"
+hint = "Basenpulver, Basenkapseln, Zeolith/Klinoptilolith, Detox-Kuren"
+[[taxonomy]]
+code = "SUPER"
+name = "Superfoods & Grünpulver"
+hint = "Gerstengras, Spirulina, Chlorella, Moringa, Chia, Maca-Pulver, Smoothie-Pulver"
+[[taxonomy]]
+code = "PROT"
+name = "Proteinpulver & Shakes"
+hint = "Whey, Isolat, vegane Proteine, Mahlzeitersatz-Shakes"
+[[taxonomy]]
+code = "SNACK"
+name = "Riegel & Snacks"
+hint = "Proteinriegel, Energieriegel, Protein-Snacks, Nussbutter-Cups"
+[[taxonomy]]
+code = "SPORT"
+name = "Sport-Performance"
+hint = "Pre-Workout, Kreatin, BCAA/EAA, Elektrolyte, Isogetränke, Energy-Gels, Booster, Recovery"
+[[taxonomy]]
+code = "GEWICHT"
+name = "Gewichtsmanagement"
+hint = "Diät-Shakes, Sättigung, Fatburner, Low-Carb-Produkte zum Abnehmen"
+[[taxonomy]]
+code = "CBD"
+name = "CBD & Hanf"
+hint = "CBD-Öle, Hanfprodukte, CBD-Kosmetik"
+[[taxonomy]]
+code = "SCHLAF"
+name = "Schlaf, Stress & Nerven"
+hint = "Melatonin, Baldrian, GABA, 5-HTP, Nerven- und Gedächtnis-Formeln"
+[[taxonomy]]
+code = "FAMILIE"
+name = "Kinder, Schwangerschaft & Frauen/Männer"
+hint = "Kinderprodukte, Schwangerschaft, Menopause, Zyklus, Fruchtbarkeit, Prostata"
+[[taxonomy]]
+code = "KOSM"
+name = "Naturkosmetik & Körperpflege"
+hint = "Cremes, Lotionen, Lippenpflege, Aloe Vera Gel, Mundpflege, Haarpflege"
+[[taxonomy]]
+code = "FOOD"
+name = "Lebensmittel & Getränke"
+hint = "Honig, Tee (nicht Heilkräuter), Nussmus, Pudding, Pflanzendrinks, Süßungsmittel, Backzutaten"
+[[taxonomy]]
+code = "TIER"
+name = "Tiergesundheit"
+hint = "Ergänzungsfuttermittel und Pflege für Hunde, Katzen, Pferde"
+[[taxonomy]]
+code = "ZUB"
+name = "Zubehör & Geräte"
+hint = "Shaker, Dosen, Massagegeräte, Wickel, Messgeräte, Bücher"
+[[taxonomy]]
+code = "MED"
+name = "Medizinprodukte & Anwendungen"
+hint = "Medizinprodukte, Moor- und Wärmeanwendungen, Wundversorgung, Sprays für Anwendung"
+[[taxonomy]]
+code = "SONST"
+name = "Sonstiges"
+hint = "passt in keine andere Gruppe"
